@@ -9,6 +9,9 @@ import { MATERIALS_BY_ID } from './materials';
 import { generateTexture } from './textures';
 import { maskBounds, tracePolygonPath } from './masks';
 import { clamp } from '../utils/common';
+// Phase 2 ceiling design modules (authored in parallel; see defensive lookup below).
+import { paintCeilingPattern } from './ceilingPatterns';
+import { CEILING_DESIGNS_BY_ID } from './ceilingDesigns';
 
 const FLOOR_TILE_KINDS = new Set(['tile', 'laminate', 'vinyl', 'marble', 'granite', 'stone', 'wallpaper', 'wood', 'concrete']);
 
@@ -24,6 +27,37 @@ function temperatureTint(tempK: number): [number, number, number] {
     Math.round(lerp(96, 255, t)),
   ];
 }
+
+/** Darken a #rrggbb hex color by `amt` (0..255 per channel). Returns input unchanged if not a hex color. */
+function shadeHex(hex: string, amt: number): string {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const sub = (v: number) => Math.max(0, Math.min(255, v - amt));
+  const r = sub((n >> 16) & 255);
+  const g = sub((n >> 8) & 255);
+  const b = sub(n & 255);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+const CEILING_LIGHT_COLORS: Record<'warm' | 'neutral' | 'cool', string> = {
+  warm: '#ffd9a0',
+  neutral: '#fff4e0',
+  cool: '#cfe4ff',
+};
+
+/** Pattern kinds this renderer recognizes; anything else is skipped (renders as plain finish). */
+const KNOWN_CEILING_PATTERNS = new Set([
+  'flat',
+  'linearPanels',
+  'geometricGrid',
+  'border',
+  'layered',
+  'recessed',
+  'tray',
+  'cove',
+  'woodGypsum',
+]);
 
 /**
  * Build a material swatch canvas at the requested effective size.
@@ -143,6 +177,177 @@ function drawCeilingShadow(
   ctx.restore();
 }
 
+/**
+ * Phase 2: paint the chosen ceiling design pattern onto the ceiling's material
+ * layer, then punch preserve zones (wooden blocks/beams) back to transparency
+ * so the original photo shows through. `points` are already height-shifted;
+ * zones are in ORIGINAL image coords and are intentionally NOT shifted.
+ * Never throws: unknown designIds simply skip the pattern step.
+ */
+function paintCeilingDesign(
+  layer: HTMLCanvasElement,
+  points: NormPoint[],
+  w: number,
+  h: number,
+  settings: SurfaceSettings,
+  ceiling: EditorState['ceiling'],
+): void {
+  const lctx = layer.getContext('2d');
+  if (!lctx) return;
+
+  const designId = ceiling.designId ?? 'none';
+  if (designId !== 'none') {
+    let design: { pattern?: unknown } | undefined;
+    try {
+      design = CEILING_DESIGNS_BY_ID[designId] as { pattern?: unknown } | undefined;
+    } catch {
+      design = undefined;
+    }
+    const pattern =
+      design && typeof design.pattern === 'string' ? design.pattern : undefined;
+    if (pattern && pattern !== 'flat' && KNOWN_CEILING_PATTERNS.has(pattern)) {
+      try {
+        const b = maskBounds(points);
+        lctx.save();
+        tracePolygonPath(lctx, points, w, h);
+        lctx.clip();
+        paintCeilingPattern(
+          lctx,
+          pattern as Parameters<typeof paintCeilingPattern>[1],
+          {
+            x: b.minX * w,
+            y: b.minY * h,
+            w: (b.maxX - b.minX) * w,
+            h: (b.maxY - b.minY) * h,
+          },
+          {
+            panelWidth: settings.panelWidth,
+            panelSpacing: settings.panelSpacing,
+            borderThickness: ceiling.borderThickness ?? 3,
+            baseColor: settings.color,
+            grooveColor: shadeHex(settings.color, 60),
+          },
+        );
+        lctx.restore();
+      } catch {
+        /* a broken pattern must never break the whole render */
+      }
+    }
+  }
+
+  for (const zone of ceiling.preserveZones ?? []) {
+    if (!Array.isArray(zone) || zone.length < 3) continue;
+    lctx.save();
+    lctx.globalCompositeOperation = 'destination-out';
+    tracePolygonPath(lctx, zone, w, h);
+    lctx.fill();
+    lctx.restore();
+  }
+}
+
+/**
+ * Phase 2: ceiling lighting overlays painted on the main canvas — light tint
+ * wash, LED edge strips (glow + brighter core line), and warm spotlights.
+ * Everything stays inside the ceiling mask clip; wall/floor pixels untouched.
+ */
+function paintCeilingLighting(
+  ctx: CanvasRenderingContext2D,
+  points: NormPoint[],
+  w: number,
+  h: number,
+  ceiling: EditorState['ceiling'],
+): void {
+  const b = maskBounds(points);
+  const bx = b.minX * w;
+  const by = b.minY * h;
+  const bw = (b.maxX - b.minX) * w;
+  const bh = (b.maxY - b.minY) * h;
+  if (bw <= 0 || bh <= 0) return;
+
+  ctx.save();
+  tracePolygonPath(ctx, points, w, h);
+  ctx.clip();
+
+  // (i) ceiling light tint wash
+  const light = ceiling.ceilingLight ?? { mode: 'off' as const, intensity: 0 };
+  if (light.mode !== 'off' && light.intensity > 0) {
+    const color = CEILING_LIGHT_COLORS[light.mode];
+    if (color) {
+      ctx.save();
+      ctx.globalAlpha = clamp(light.intensity, 0, 1) * 0.22;
+      ctx.fillStyle = color;
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.restore();
+    }
+  }
+
+  // (ii) LED strips along ceiling edges
+  const stripH = Math.max(3, h * 0.008);
+  for (const strip of ceiling.ledStrips ?? []) {
+    if (!strip) continue;
+    const intensity = clamp(Number(strip.intensity), 0, 1);
+    if (intensity <= 0) continue;
+    const inset = clamp(Number(strip.inset), 0, 1);
+    const length = clamp(Number(strip.length), 0, 1);
+    let rx = 0;
+    let ry = 0;
+    let rw = 0;
+    let rh = 0;
+    switch (strip.edge) {
+      case 'top':
+        rx = bx + inset * bw; ry = by; rw = length * bw; rh = stripH;
+        break;
+      case 'bottom':
+        rx = bx + inset * bw; ry = by + bh - stripH; rw = length * bw; rh = stripH;
+        break;
+      case 'left':
+        rx = bx; ry = by + inset * bh; rw = stripH; rh = length * bh;
+        break;
+      case 'right':
+        rx = bx + bw - stripH; ry = by + inset * bh; rw = stripH; rh = length * bh;
+        break;
+      default:
+        continue;
+    }
+    if (rw <= 0 || rh <= 0) continue;
+    // glow body
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,240,210,0.95)';
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = `rgba(255,246,226,${(0.85 * intensity).toFixed(3)})`;
+    ctx.fillRect(rx, ry, rw, rh);
+    ctx.restore();
+    // brighter core line
+    ctx.save();
+    ctx.fillStyle = `rgba(255,252,240,${(0.95 * intensity).toFixed(3)})`;
+    if (strip.edge === 'top' || strip.edge === 'bottom') {
+      ctx.fillRect(rx, ry + rh * 0.35, rw, rh * 0.3);
+    } else {
+      ctx.fillRect(rx + rw * 0.35, ry, rw * 0.3, rh);
+    }
+    ctx.restore();
+  }
+
+  // (iii) spotlights — warm radial glows
+  const radius = Math.min(w, h) * 0.06;
+  for (const spot of ceiling.spotlights ?? []) {
+    if (!spot) continue;
+    const a = clamp(Number(spot.intensity), 0, 1) * 0.5;
+    if (a <= 0) continue;
+    const sx = clamp(Number(spot.x), 0, 1) * w;
+    const sy = clamp(Number(spot.y), 0, 1) * h;
+    const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, radius);
+    grad.addColorStop(0, `rgba(255,244,220,${a.toFixed(3)})`);
+    grad.addColorStop(1, 'rgba(255,244,220,0)');
+    ctx.save();
+    ctx.fillStyle = grad;
+    ctx.fillRect(sx - radius, sy - radius, radius * 2, radius * 2);
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
 function applyLighting(ctx: CanvasRenderingContext2D, w: number, h: number, lighting: EditorState['lighting']): void {
   if (lighting.intensity <= 0 && lighting.glows.length === 0) return;
 
@@ -208,6 +413,13 @@ export function renderEditor(original: ImageBitmap, state: EditorState): HTMLCan
     }
 
     const { layer, points } = renderSurfaceLayer(original, surface, settings, shiftPx);
+
+    // Phase 2: ceiling design pattern + preserve zones, painted onto the
+    // material layer before compositing.
+    if (surface.category === 'ceiling') {
+      paintCeilingDesign(layer, points, w, h, settings, state.ceiling);
+    }
+
     // Composite only inside the (possibly shifted) mask so surfaces never
     // erase each other.
     ctx.save();
@@ -216,6 +428,11 @@ export function renderEditor(original: ImageBitmap, state: EditorState): HTMLCan
     ctx.clip();
     ctx.drawImage(layer, 0, 0);
     ctx.restore();
+
+    // Phase 2: ceiling lighting overlays on the composited ceiling.
+    if (surface.category === 'ceiling') {
+      paintCeilingLighting(ctx, points, w, h, state.ceiling);
+    }
 
     if (surface.category === 'ceiling' && state.ceiling.heightShift > 0) {
       drawCeilingShadow(ctx, surface, w, h);

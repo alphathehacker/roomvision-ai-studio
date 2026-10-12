@@ -93,6 +93,41 @@ export interface LightingSettings {
 export interface CeilingSettings {
   /** visual drop of the ceiling render, percent of ceiling-mask height 0..25 */
   heightShift: number;
+  /** 'none' or a ceiling design id; default 'none' */
+  designId: string;
+  /** design border thickness 0..8; default 3 */
+  borderThickness: number;
+  /** ceiling light wash; default { mode:'off', intensity:0.5 } */
+  ceilingLight: { mode: CeilingLightMode; intensity: number };
+  /** LED strips along ceiling edges; default [] */
+  ledStrips: LedStrip[];
+  /** ceiling spotlights; default [] */
+  spotlights: CeilingSpot[];
+  /** exclusion polygons (wooden blocks/beams); default [] */
+  preserveZones: NormPoint[][];
+}
+
+export type CeilingLightMode = 'off' | 'warm' | 'neutral' | 'cool';
+
+export interface LedStrip {
+  id: string;
+  edge: 'top' | 'bottom' | 'left' | 'right';
+  /** 0..1 offset of strip start along the edge */
+  inset: number;
+  /** 0.1..1 fraction of edge length */
+  length: number;
+  /** 0..1 */
+  intensity: number;
+}
+
+export interface CeilingSpot {
+  id: string;
+  /** normalized 0..1 */
+  x: number;
+  /** normalized 0..1 */
+  y: number;
+  /** 0..1 */
+  intensity: number;
 }
 
 export interface EditorState {
@@ -104,7 +139,7 @@ export interface EditorState {
   version: number;
 }
 
-export const EDITOR_STATE_VERSION = 1;
+export const EDITOR_STATE_VERSION = 2;
 
 export function defaultSurfaceSettings(materialId: string, color: string): SurfaceSettings {
   return {
