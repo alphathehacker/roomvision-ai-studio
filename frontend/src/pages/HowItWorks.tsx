@@ -53,8 +53,9 @@ export function HowItWorks() {
         </ul>
         <p className="mt-3 flex items-start gap-2 text-sm text-charcoal-soft bg-sand/70 rounded-2xl p-4">
           <ServerOff size={16} className="mt-0.5 shrink-0 text-bronze" aria-hidden="true" />
-          You can point the app at your own backend from the Settings page (default
-          http://localhost:5000) once a segmentation service is running there.
+          The app talks to the RoomVision backend by default
+          (https://roomvision-backend.onrender.com); you can point it at your own
+          backend from the Settings page.
         </p>
       </section>
 

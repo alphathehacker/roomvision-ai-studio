@@ -93,7 +93,7 @@ export function Settings({ onToast }: SettingsProps) {
               id="backend-url"
               value={backendUrl}
               onChange={(e) => setBackendUrlState(e.target.value)}
-              placeholder="http://localhost:5000"
+              placeholder="https://roomvision-backend.onrender.com"
               inputMode="url"
               spellCheck={false}
             />

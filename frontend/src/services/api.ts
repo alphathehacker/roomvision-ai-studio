@@ -4,7 +4,7 @@
  */
 
 export const BACKEND_URL_KEY = 'roomvision.backendUrl';
-export const DEFAULT_BACKEND_URL = 'http://localhost:5000';
+export const DEFAULT_BACKEND_URL = 'https://roomvision-backend.onrender.com';
 
 export function getBackendUrl(): string {
   try {
