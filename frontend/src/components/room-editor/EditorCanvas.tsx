@@ -14,6 +14,12 @@ interface EditorCanvasProps {
   mode: CanvasMode;
   glowPlacing: boolean;
   onPlaceGlow: (p: NormPoint) => void;
+  /** ceiling-studio spotlight placement: click the canvas to add a spotlight */
+  spotPlacing?: boolean;
+  onPlaceSpot?: (p: NormPoint) => void;
+  /** ceiling-studio preserve-zone placement: drag a rectangle on the canvas */
+  preservePlacing?: boolean;
+  onPlacePreserveRect?: (r: { x0: number; y0: number; x1: number; y1: number }) => void;
   /** commit: new history entry (force pushes even if unchanged) */
   commit: (updater: (s: EditorState) => EditorState, force?: boolean) => void;
   /** replace: transient update, no history entry */
@@ -40,6 +46,10 @@ export function EditorCanvas({
   mode,
   glowPlacing,
   onPlaceGlow,
+  spotPlacing = false,
+  onPlaceSpot,
+  preservePlacing = false,
+  onPlacePreserveRect,
   commit,
   replace,
   selectedPoint,
@@ -53,6 +63,8 @@ export function EditorCanvas({
   const dragRef = useRef<{ surfaceId: string; index: number } | null>(null);
   const rectRef = useRef<{ start: NormPoint } | null>(null);
   const [rectDraft, setRectDraft] = useState<NormPoint[] | null>(null);
+  const preserveRef = useRef<{ start: NormPoint } | null>(null);
+  const [preserveDraft, setPreserveDraft] = useState<NormPoint[] | null>(null);
   const renderedRef = useRef(onRendered);
   const errorRef = useRef(onRenderError);
   renderedRef.current = onRendered;
@@ -92,6 +104,19 @@ export function EditorCanvas({
       const rect = svg.getBoundingClientRect();
       const p = toNorm(e, rect);
 
+      // Placement modes take precedence over mask editing while active.
+      if (spotPlacing) {
+        onPlaceSpot?.(p);
+        return;
+      }
+
+      if (preservePlacing) {
+        e.preventDefault();
+        preserveRef.current = { start: p };
+        (e.target as Element).setPointerCapture?.(e.pointerId);
+        return;
+      }
+
       if (glowPlacing) {
         onPlaceGlow(p);
         return;
@@ -123,7 +148,7 @@ export function EditorCanvas({
       onSelectSurface(hit ? hit.id : null);
       onSelectPoint(null);
     },
-    [glowPlacing, mode, onPlaceGlow, selectedSurface, commit, onSelectPoint, onSelectSurface, state.surfaces],
+    [glowPlacing, mode, onPlaceGlow, spotPlacing, onPlaceSpot, preservePlacing, selectedSurface, commit, onSelectPoint, onSelectSurface, state.surfaces],
   );
 
   const handleOverlayPointerMove = useCallback(
@@ -144,6 +169,20 @@ export function EditorCanvas({
         }));
         return;
       }
+      // preserve-zone draft (ceiling studio): live rectangle overlay while dragging
+      if (preserveRef.current && preservePlacing) {
+        const svg = overlayRef.current;
+        if (!svg) return;
+        const p = toNorm(e, svg.getBoundingClientRect());
+        const s0 = preserveRef.current.start;
+        setPreserveDraft([
+          { x: Math.min(s0.x, p.x), y: Math.min(s0.y, p.y) },
+          { x: Math.max(s0.x, p.x), y: Math.min(s0.y, p.y) },
+          { x: Math.max(s0.x, p.x), y: Math.max(s0.y, p.y) },
+          { x: Math.min(s0.x, p.x), y: Math.max(s0.y, p.y) },
+        ]);
+        return;
+      }
       // rectangle draft
       if (rectRef.current && mode === 'rect') {
         const svg = overlayRef.current;
@@ -158,7 +197,7 @@ export function EditorCanvas({
         ]);
       }
     },
-    [mode, replace],
+    [mode, preservePlacing, replace],
   );
 
   const handleOverlayPointerUp = useCallback(
@@ -169,6 +208,23 @@ export function EditorCanvas({
         dragRef.current = null;
         return;
       }
+      if (preserveRef.current && preserveDraft) {
+        const xs = preserveDraft.map((q) => q.x);
+        const ys = preserveDraft.map((q) => q.y);
+        const x0 = Math.min(...xs);
+        const x1 = Math.max(...xs);
+        const y0 = Math.min(...ys);
+        const y1 = Math.max(...ys);
+        // ignore accidental tiny drags (min 3% of the canvas)
+        if (x1 - x0 >= 0.03 && y1 - y0 >= 0.03) {
+          onPlacePreserveRect?.({ x0, y0, x1, y1 });
+        }
+        preserveRef.current = null;
+        setPreserveDraft(null);
+        return;
+      }
+      preserveRef.current = null;
+      setPreserveDraft(null);
       if (rectRef.current && rectDraft && selectedSurface) {
         const pts = rectDraft;
         const id = selectedSurface.id;
@@ -181,12 +237,12 @@ export function EditorCanvas({
       setRectDraft(null);
       void e;
     },
-    [rectDraft, selectedSurface, commit],
+    [rectDraft, preserveDraft, selectedSurface, commit, onPlacePreserveRect],
   );
 
   const handlePointPointerDown = useCallback(
     (e: React.PointerEvent, surfaceId: string, index: number) => {
-      if (glowPlacing || mode !== 'select') return;
+      if (glowPlacing || spotPlacing || preservePlacing || mode !== 'select') return;
       e.stopPropagation();
       e.preventDefault();
       onSelectSurface(surfaceId);
@@ -194,7 +250,7 @@ export function EditorCanvas({
       dragRef.current = { surfaceId, index };
       (e.target as Element).setPointerCapture?.(e.pointerId);
     },
-    [glowPlacing, mode, onSelectSurface, onSelectPoint],
+    [glowPlacing, spotPlacing, preservePlacing, mode, onSelectSurface, onSelectPoint],
   );
 
   const handlePointContextMenu = useCallback(
@@ -240,6 +296,14 @@ export function EditorCanvas({
       style={{ maxHeight: '70vh' }}
       aria-label="Room editor canvas area"
     >
+      {(spotPlacing || preservePlacing) && (
+        <div
+          className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 z-10 rounded-full bg-charcoal/85 text-white text-xs px-3 py-1.5 whitespace-nowrap"
+          role="status"
+        >
+          {spotPlacing ? 'Click to place spotlight' : 'Drag a rectangle around the beam or block'}
+        </div>
+      )}
       <div className="relative mx-auto" style={{ width: `${zoom * 100}%`, maxWidth: 'none' }}>
         <canvas ref={canvasRef} className="block w-full h-auto select-none" aria-label="Edited room preview" />
         <svg
@@ -247,20 +311,30 @@ export function EditorCanvas({
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
           className={`absolute inset-0 w-full h-full ${
-            glowPlacing ? 'cursor-crosshair' : mode === 'add' ? 'cursor-copy' : mode === 'rect' ? 'cursor-crosshair' : 'cursor-default'
+            spotPlacing || preservePlacing || glowPlacing
+              ? 'cursor-crosshair'
+              : mode === 'add'
+                ? 'cursor-copy'
+                : mode === 'rect'
+                  ? 'cursor-crosshair'
+                  : 'cursor-default'
           }`}
           onPointerDown={handleOverlayPointerDown}
           onPointerMove={handleOverlayPointerMove}
           onPointerUp={handleOverlayPointerUp}
           role="application"
           aria-label={
-            glowPlacing
-              ? 'Click to place a light glow spot'
-              : mode === 'add'
-                ? 'Click to add a mask point to the selected surface'
-                : mode === 'rect'
-                  ? 'Drag to draw a rectangular mask'
-                  : 'Click a surface to select it, drag points to reshape'
+            spotPlacing
+              ? 'Click to place a ceiling spotlight'
+              : preservePlacing
+                ? 'Drag a rectangle to mark a preserve zone'
+                : glowPlacing
+                  ? 'Click to place a light glow spot'
+                  : mode === 'add'
+                    ? 'Click to add a mask point to the selected surface'
+                    : mode === 'rect'
+                      ? 'Drag to draw a rectangular mask'
+                      : 'Click a surface to select it, drag points to reshape'
           }
         >
           {state.surfaces.map((s) => {
@@ -304,7 +378,7 @@ export function EditorCanvas({
                   stroke="#ffffff"
                   strokeWidth={0.25}
                   vectorEffect="non-scaling-stroke"
-                  style={{ cursor: mode === 'select' && !glowPlacing ? 'grab' : 'default', pointerEvents: s.id === selectedId ? 'auto' : 'none' }}
+                  style={{ cursor: mode === 'select' && !glowPlacing && !spotPlacing && !preservePlacing ? 'grab' : 'default', pointerEvents: s.id === selectedId ? 'auto' : 'none' }}
                   onPointerDown={(e) => handlePointPointerDown(e, s.id, i)}
                   onContextMenu={(e) => handlePointContextMenu(e, s.id, i)}
                   role="button"
@@ -321,6 +395,37 @@ export function EditorCanvas({
               );
             }),
           )}
+          {preserveDraft && (
+            <polygon
+              points={preserveDraft.map((p) => `${p.x * 100},${p.y * 100}`).join(' ')}
+              fill="#7fb069"
+              fillOpacity={0.25}
+              stroke="#7fb069"
+              strokeWidth={0.4}
+              strokeDasharray="1.2 0.8"
+              vectorEffect="non-scaling-stroke"
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
+          {(state.ceiling.preserveZones ?? []).map((zone, i) => (
+            <polygon
+              key={`zone-${i}`}
+              points={zone.map((p) => `${p.x * 100},${p.y * 100}`).join(' ')}
+              fill="#7fb069"
+              fillOpacity={0.18}
+              stroke="#5a8a4d"
+              strokeWidth={0.4}
+              strokeDasharray="1.2 0.8"
+              vectorEffect="non-scaling-stroke"
+              style={{ pointerEvents: 'none' }}
+            />
+          ))}
+          {(state.ceiling.spotlights ?? []).map((sp) => (
+            <g key={sp.id} style={{ pointerEvents: 'none' }}>
+              <circle cx={sp.x * 100} cy={sp.y * 100} r={2.4} fill="rgba(255,247,214,0.35)" />
+              <circle cx={sp.x * 100} cy={sp.y * 100} r={1} fill="#ffe9a8" stroke="#f5c542" strokeWidth={0.25} vectorEffect="non-scaling-stroke" />
+            </g>
+          ))}
           {state.lighting.glows.map((g) => (
             <g key={g.id} style={{ pointerEvents: 'none' }}>
               <circle cx={g.x * 100} cy={g.y * 100} r={2.2} fill="rgba(255,240,214,0.35)" />

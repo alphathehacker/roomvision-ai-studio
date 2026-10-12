@@ -122,9 +122,45 @@ Uploads: JPEG/PNG/WebP, default 15 MB cap (`MAX_UPLOAD_MB`). Structured JSON err
 - **How It Works**: honest manual-mode vs AI-mode (unavailable until configured).
 - **Settings**: backend URL, delete-all-local-designs, storage estimate, version.
 
-## Verification status (Phase 1)
+## Phase 2 — Ceiling Design Studio (complete)
 
-- `npm run build` (tsc --noEmit + vite build): **zero errors**, 1616 modules.
+- **PVC library** (10 designs, procedural): White PVC, Wood-grain PVC, Dark Wood PVC,
+  Grey PVC, Black PVC, Marble-look PVC, Glossy PVC, Matte PVC, Linear Rectangular
+  Panels, Geometric Rectangular Layout.
+- **Gypsum library** (8 designs): Plain Gypsum, Rectangular False Ceiling, Layered
+  Rectangular, Recessed Rectangular, Border Design, Cove-lighting Design, Rectangular
+  Tray Ceiling, Wood & Gypsum Combo.
+- **Rectangular-only guarantee**: every pattern layout is computed by pure
+  rectangle math (`services/ceilingLayouts.ts`); an automated check
+  (`frontend/scripts/verify-ceiling-geometry.mjs`, 3,200 layout combos) asserts all
+  emitted geometry is axis-aligned rectangles inside the mask bounds. No triangular
+  panels, frames, or cutouts anywhere.
+- **Controls**: ceiling color, finish picker, panel width/spacing, border thickness,
+  ceiling-height visual drop, warm/neutral/cool/off ceiling lighting (labeled
+  simplified preview), LED strip placement (add per top/bottom/left/right edge with
+  inset/length/intensity), click-to-place spotlights (warm canvas glow), preview +
+  reset. Everything live-commits through undo/redo.
+- **Wooden-block preservation**: "preserve zones" — drag rectangles over beams/blocks;
+  the renderer punches them back to the original photo (`destination-out` in original
+  image coordinates) so designs never paint over them. Preview labeled as a
+  visualization, not a verified structural change.
+- **Manual mask correction**: "Edit ceiling mask" jumps to the polygon editor for the
+  ceiling surface.
+- **Persistence**: `CeilingSettings` extended (designId, borderThickness, ceilingLight,
+  ledStrips, spotlights, preserveZones); save format v1→v2 with defensive migration —
+  old projects open identically. Comparison view, IndexedDB library, and PNG/JPEG
+  export all pick up Phase 2 state automatically.
+
+## Verification status (Phase 1 + 2)
+
+- `npm run build` (tsc --noEmit + vite build): **zero errors**, 1619 modules.
+- Phase 2 geometry check `node frontend/scripts/verify-ceiling-geometry.mjs`: **pass**
+  (3,200 layout combos × 8 functions, 32 degenerate probes, export-surface check;
+  negative test confirmed the script catches real failures).
+- Phase 2 pixel tests (node + canvas, 18 checks): **pass** — preserve zones keep
+  original pixels, designs stay inside the mask (no wall/floor bleed), heightShift
+  changes output, spotlight/LED/tint math exact, v1→v2 migration renders, unknown
+  designId degrades gracefully, all 18 designs render.
 - Flask: `compileall` clean; live boot + curl suite: health 200, full projects CRUD
   lifecycle, multipart PNG upload with byte-identical round-trip, 400 on bad type,
   413 on oversize, 404 on missing project, **503 honest JSON** on both AI endpoints
@@ -145,8 +181,8 @@ Uploads: JPEG/PNG/WebP, default 15 MB cap (`MAX_UPLOAD_MB`). Structured JSON err
 
 ## Later phases (seams already in place)
 
-- **Phase 2 — Ceiling designer**: extend `ceiling-designer/` (PVC/gypsum libraries);
-  `furniture-tools/` README marks the furniture seam — no inert UI added in Phase 1.
+- **Phase 2 — Ceiling designer**: DONE (see above).
+  `furniture-tools/` README marks the furniture seam — no inert UI added.
 - **Phase 3 — AI segmentation**: implement `AIProvider` in
   `backend/services/ai_provider.py` (plug-in recipe in docstring), register in
   `get_provider()`; frontend seam at `frontend/src/services/aiProvider.ts`.

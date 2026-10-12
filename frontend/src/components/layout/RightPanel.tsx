@@ -18,6 +18,10 @@ interface RightPanelProps {
   onSelectPoint: (p: { surfaceId: string; index: number } | null) => void;
   glowPlacing: boolean;
   onToggleGlowPlacement: () => void;
+  spotPlacing?: boolean;
+  onToggleSpotPlacement?: () => void;
+  preservePlacing?: boolean;
+  onTogglePreservePlacement?: () => void;
   originalBlob: Blob;
   onToast: (message: string, kind?: 'info' | 'error') => void;
 }
@@ -25,6 +29,17 @@ interface RightPanelProps {
 /** Context panel for the active category, plus the always-available surface tools. */
 export function RightPanel(props: RightPanelProps) {
   const { category } = props;
+
+  const editCeilingMask = () => {
+    const first = props.state.surfaces.find((s) => s.category === 'ceiling');
+    if (!first) {
+      props.onToast('No ceiling surface to edit.', 'error');
+      return;
+    }
+    props.onSelectSurface(first.id);
+    props.onModeChange('add');
+  };
+
   return (
     <div className="space-y-6">
       <SurfacePanel
@@ -66,6 +81,11 @@ export function RightPanel(props: RightPanelProps) {
           onSelectSurface={props.onSelectSurface}
           commit={props.commit}
           onToast={props.onToast}
+          spotPlacing={props.spotPlacing ?? false}
+          onToggleSpotPlacement={props.onToggleSpotPlacement}
+          preservePlacing={props.preservePlacing ?? false}
+          onTogglePreservePlacement={props.onTogglePreservePlacement}
+          onEditCeilingMask={editCeilingMask}
         />
       )}
       {category === 'lighting' && (

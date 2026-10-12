@@ -1,4 +1,4 @@
-# RoomVision AI Studio — Frontend (Phase 1)
+# RoomVision AI Studio — Frontend (Phase 1 + 2)
 
 React + TypeScript + Vite frontend for RoomVision AI Studio, an in-browser interior-design
 visualizer. **Everything runs locally in the browser** — no backend required, no uploads,
@@ -46,6 +46,30 @@ Requires Node 18+. No environment variables, no secrets, no backend.
 
 UI categories are exactly **Walls, Ceiling, Flooring, Lighting** — no Furniture/Decor buttons
 until those features exist (see `src/components/furniture-tools/README.md`).
+
+## What works in Phase 2 (Ceiling Design Studio)
+
+- **Design libraries** (`src/services/ceilingDesigns.ts`): 10 PVC designs (White,
+  Wood-grain, Dark Wood, Grey, Black, Marble-look, Glossy, Matte, Linear Rectangular
+  Panels, Geometric Rectangular Layout) and 8 gypsum designs (Plain, Rectangular False
+  Ceiling, Layered Rectangular, Recessed Rectangular, Border, Cove-lighting, Rectangular
+  Tray, Wood & Gypsum Combo). Cards show lazy procedural thumbnails.
+- **Rectangular-only patterns** (`src/services/ceilingLayouts.ts` + `ceilingPatterns.ts`):
+  all pattern geometry is axis-aligned rectangles; `node frontend/scripts/verify-ceiling-geometry.mjs`
+  asserts this over 3,200 layout combos.
+- **Controls** (`src/components/ceiling-designer/CeilingControls.tsx`): finish picker,
+  color picker, panel width/spacing, border thickness, texture scale/opacity/blend/
+  brightness, ceiling-height drop, ceiling lighting (Off/Warm/Neutral/Cool + intensity,
+  labeled simplified preview), LED strips (per-edge add, inset/length/intensity),
+  click-to-place spotlights, preserve zones (drag rectangles over beams/blocks — the
+  renderer keeps the original photo there), "Edit ceiling mask" shortcut, Reset.
+  Everything live-commits through the global undo/redo.
+- **Renderer** (`src/services/renderer.ts`): pattern painted clipped to the
+  height-shifted ceiling mask; preserve zones punched in original photo coordinates;
+  LED/spot/tint overlays clipped to the mask — walls and floors never touched.
+- **Persistence**: save format v2 (`designId`, `borderThickness`, `ceilingLight`,
+  `ledStrips`, `spotlights`, `preserveZones`); v1 saves migrate automatically and open
+  identically.
 
 ## Manual camera-testing steps
 

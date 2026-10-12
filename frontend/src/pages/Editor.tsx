@@ -33,6 +33,8 @@ interface EditorProps {
 }
 
 const MAX_GLOWS = 8;
+const MAX_SPOTS = 12;
+const MAX_PRESERVE_ZONES = 12;
 
 export function Editor({ session, onExit, onSaved, onToast }: EditorProps) {
   const initial = useRef<EditorState>(
@@ -49,6 +51,8 @@ export function Editor({ session, onExit, onSaved, onToast }: EditorProps) {
   const [selectedPoint, setSelectedPoint] = useState<{ surfaceId: string; index: number } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [glowPlacing, setGlowPlacing] = useState(false);
+  const [spotPlacing, setSpotPlacing] = useState(false);
+  const [preservePlacing, setPreservePlacing] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -117,6 +121,8 @@ export function Editor({ session, onExit, onSaved, onToast }: EditorProps) {
     (c: EditorCategory) => {
       setCategory(c);
       setGlowPlacing(false);
+      setSpotPlacing(false);
+      setPreservePlacing(false);
       const map: Record<EditorCategory, 'wall' | 'ceiling' | 'floor' | 'wall'> = {
         walls: 'wall',
         ceiling: 'ceiling',
@@ -172,8 +178,59 @@ export function Editor({ session, onExit, onSaved, onToast }: EditorProps) {
     setSelectedId(s.surfaces.find((x) => x.category === 'wall')?.id ?? null);
     setSelectedPoint(null);
     setGlowPlacing(false);
+    setSpotPlacing(false);
+    setPreservePlacing(false);
     pushToast('All edits cleared — original photo restored.');
   };
+
+  const placeSpot = useCallback(
+    (p: NormPoint) => {
+      const hasCeiling = stateRef.current.surfaces.some((s) => s.category === 'ceiling');
+      if (!hasCeiling) {
+        pushToast('Add a ceiling surface before placing spotlights.', 'error');
+        setSpotPlacing(false);
+        return;
+      }
+      const spots = stateRef.current.ceiling.spotlights ?? [];
+      if (spots.length >= MAX_SPOTS) {
+        pushToast(`You can add up to ${MAX_SPOTS} spotlights.`, 'error');
+        setSpotPlacing(false);
+        return;
+      }
+      commit((s) => ({
+        ...s,
+        ceiling: {
+          ...s.ceiling,
+          spotlights: [...(s.ceiling.spotlights ?? []), { id: uuid(), x: p.x, y: p.y, intensity: 0.8 }],
+        },
+      }));
+      pushToast(`Spotlight ${spots.length + 1} placed — click again for another, or tap Stop.`);
+    },
+    [commit, pushToast],
+  );
+
+  const placePreserveRect = useCallback(
+    (r: { x0: number; y0: number; x1: number; y1: number }) => {
+      const zones = stateRef.current.ceiling.preserveZones ?? [];
+      if (zones.length >= MAX_PRESERVE_ZONES) {
+        pushToast(`You can add up to ${MAX_PRESERVE_ZONES} preserve zones.`, 'error');
+        setPreservePlacing(false);
+        return;
+      }
+      const poly: NormPoint[] = [
+        { x: r.x0, y: r.y0 },
+        { x: r.x1, y: r.y0 },
+        { x: r.x1, y: r.y1 },
+        { x: r.x0, y: r.y1 },
+      ];
+      commit((s) => ({
+        ...s,
+        ceiling: { ...s.ceiling, preserveZones: [...(s.ceiling.preserveZones ?? []), poly] },
+      }));
+      pushToast(`Preserve zone ${zones.length + 1} added — designs keep the original photo there.`);
+    },
+    [commit, pushToast],
+  );
 
   const exportBlob = async (kind: 'png' | 'jpeg') => {
     const canvas = editedCanvasRef.current;
@@ -220,6 +277,10 @@ export function Editor({ session, onExit, onSaved, onToast }: EditorProps) {
     onSelectPoint: setSelectedPoint,
     glowPlacing,
     onToggleGlowPlacement: () => setGlowPlacing((g) => !g),
+    spotPlacing,
+    onToggleSpotPlacement: () => setSpotPlacing((g) => !g),
+    preservePlacing,
+    onTogglePreservePlacement: () => setPreservePlacing((g) => !g),
     originalBlob: session.blob,
     onToast: pushToast,
   };
@@ -315,6 +376,10 @@ export function Editor({ session, onExit, onSaved, onToast }: EditorProps) {
               mode={mode}
               glowPlacing={glowPlacing}
               onPlaceGlow={placeGlow}
+              spotPlacing={spotPlacing}
+              onPlaceSpot={placeSpot}
+              preservePlacing={preservePlacing}
+              onPlacePreserveRect={placePreserveRect}
               commit={commit}
               replace={replace}
               selectedPoint={selectedPoint}
@@ -326,13 +391,17 @@ export function Editor({ session, onExit, onSaved, onToast }: EditorProps) {
               onRenderError={setRenderError}
             />
             <p className="text-xs text-charcoal-soft mt-2 text-center">
-              {glowPlacing
-                ? 'Glow placement active — click the photo to place a glow spot.'
-                : mode === 'add'
-                  ? 'Add-point mode — click the photo to add a corner to the selected surface.'
-                  : mode === 'rect'
-                    ? 'Rectangle mode — drag on the photo to re-draw the selected surface.'
-                    : 'Click a colored region to select its surface. Drag its points to reshape the mask.'}
+              {spotPlacing
+                ? 'Spotlight placement active — click the photo to place a spotlight.'
+                : preservePlacing
+                  ? 'Preserve-zone mode — drag a rectangle on the photo around the beam or block.'
+                  : glowPlacing
+                    ? 'Glow placement active — click the photo to place a glow spot.'
+                    : mode === 'add'
+                      ? 'Add-point mode — click the photo to add a corner to the selected surface.'
+                      : mode === 'rect'
+                        ? 'Rectangle mode — drag on the photo to re-draw the selected surface.'
+                        : 'Click a colored region to select its surface. Drag its points to reshape the mask.'}
             </p>
           </div>
         </div>
