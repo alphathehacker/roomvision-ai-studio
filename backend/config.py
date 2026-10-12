@@ -34,10 +34,19 @@ class Config:
     UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(_BASE_DIR, "uploads"))
     MAX_UPLOAD_MB = _get_int("MAX_UPLOAD_MB", 15)
 
-    # AI provider (Phase 3 slot; unconfigured by default)
+    # AI provider (unconfigured by default; "huggingface" supported)
     AI_PROVIDER = os.environ.get("AI_PROVIDER", "")
     AI_API_KEY = os.environ.get("AI_API_KEY", "")
     AI_API_URL = os.environ.get("AI_API_URL", "")
+
+    # Hugging Face provider settings
+    HF_TOKEN = os.environ.get("HF_TOKEN", "")
+    HF_SEG_MODEL = os.environ.get(
+        "HF_SEG_MODEL", "nvidia/segformer-b2-finetuned-ade-512-768"
+    )
+    HF_API_URL = os.environ.get(
+        "HF_API_URL", "https://api-inference.huggingface.co/models"
+    )
 
     # CORS
     FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "*")

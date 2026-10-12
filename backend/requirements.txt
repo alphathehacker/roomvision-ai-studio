@@ -1,8 +1,8 @@
-# RoomVision AI Studio backend (Phase 1)
+# RoomVision AI Studio backend
 # Install: pip install -r requirements.txt
-# No heavy ML dependencies in Phase 1 — the AI provider seam is a stub
-# until Phase 3 plugs in a real model service.
 
 Flask==3.1.1
 Flask-Cors==5.0.1
 Pillow==11.3.0
+requests==2.32.3        # Hugging Face Inference API client (segmentation)
+gunicorn==23.0.0        # production WSGI server (used on Render)

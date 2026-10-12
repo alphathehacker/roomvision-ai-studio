@@ -10,7 +10,7 @@ import json
 from flask import Blueprint, jsonify, request
 
 from config import Config
-from services.ai_provider import get_provider, ProviderNotConfigured
+from services.ai_provider import get_provider, ProviderError, ProviderNotConfigured
 from utils.validation import validate_image_upload, MAX_CHUNK
 
 ai_bp = Blueprint("ai", __name__, url_prefix="/api")
@@ -81,6 +81,8 @@ def segment_room():
             "error": "AI provider not configured",
             "detail": str(exc),
         }), 503
+    except ProviderError as exc:  # configured provider failed honestly
+        return jsonify({"error": str(exc)}), exc.status
     return jsonify(result), 200
 
 
@@ -105,4 +107,6 @@ def transform_room():
             "error": "AI provider not configured",
             "detail": str(exc),
         }), 503
+    except ProviderError as exc:  # configured provider failed honestly
+        return jsonify({"error": str(exc)}), exc.status
     return jsonify(result), 200

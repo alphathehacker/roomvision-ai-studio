@@ -4,21 +4,25 @@ Phase 1 ships only the abstract ``AIProvider`` interface plus
 ``UnconfiguredProvider``. Any request that needs real AI honestly returns
 HTTP 503 until a provider is configured (see routes/ai.py).
 
-Adding a real provider later (Phase 3), e.g. a segmentation model on
-Replicate or a custom GPU endpoint:
+Adding a real provider (Phase 3), e.g. a segmentation model on
+Hugging Face or a custom GPU endpoint:
 
     1. Subclass ``AIProvider`` and implement ``segment_room(image_bytes)``
        and ``transform_room(image_bytes, params)``. Read credentials only
-       from ``Config.AI_API_KEY`` / ``Config.AI_API_URL`` — never hardcode
-       them, never log them, never return them in responses.
-    2. Give it a short name (e.g. ``"replicate"``) and register it in
+       from ``Config`` (env vars) — never hardcode them, never log them,
+       never return them in responses. Raise ``ProviderError`` (with a
+       status) for honest upstream failures; never fabricate results.
+    2. Give it a short name (e.g. ``"huggingface"``) and register it in
        ``get_provider()`` below:
 
-           elif name == "replicate":
-               from services.replicate_provider import ReplicateProvider
-               return ReplicateProvider()
+           elif name == "huggingface":
+               from services.huggingface_provider import HuggingFaceProvider
+               return HuggingFaceProvider()
 
-    3. Set ``AI_PROVIDER=replicate`` (+ ``AI_API_KEY``) in the environment.
+    3. Set ``AI_PROVIDER=huggingface`` (+ ``HF_TOKEN``) in the environment.
+
+The ``"huggingface"`` provider is implemented (services/huggingface_provider.py):
+semantic segmentation via the Hugging Face Inference API.
 
 Contracts:
     - ``segment_room`` returns a dict like
@@ -35,6 +39,19 @@ from abc import ABC, abstractmethod
 
 class ProviderNotConfigured(Exception):
     """Raised when AI is requested but no provider is configured."""
+
+
+class ProviderError(Exception):
+    """Raised when a configured provider fails honestly.
+
+    Carries an HTTP status for the route layer (502 for upstream failures,
+    504 for timeouts, 501 for unsupported operations). The message must
+    never include credentials.
+    """
+
+    def __init__(self, message, status=502):
+        super().__init__(message)
+        self.status = status
 
 
 class AIProvider(ABC):
@@ -70,10 +87,9 @@ def get_provider():
     name = (Config.AI_PROVIDER or "").strip().lower()
     if not name:
         return UnconfiguredProvider()
-    # Future providers register here, e.g.:
-    #   elif name == "replicate":
-    #       from services.replicate_provider import ReplicateProvider
-    #       return ReplicateProvider()
+    elif name == "huggingface":
+        from services.huggingface_provider import HuggingFaceProvider
+        return HuggingFaceProvider()
     raise ValueError(
         "Unknown AI_PROVIDER %r. Leave AI_PROVIDER empty for the "
         "unconfigured (503) default." % Config.AI_PROVIDER
