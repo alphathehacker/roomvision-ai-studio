@@ -78,6 +78,10 @@ def create_app():
     return app
 
 
+# Module-level app for WSGI servers (e.g. `gunicorn app:app` on Render).
+app = create_app()
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
