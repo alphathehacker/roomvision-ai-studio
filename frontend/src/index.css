@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cream: #faf7f2;
+  --color-sand: #f4eee3;
+  --color-sand-deep: #e9e0cd;
+  --color-charcoal: #2b2b2e;
+  --color-charcoal-soft: #55555a;
+  --color-moss: #6b7f5e;
+  --color-moss-deep: #55663f;
+  --color-bronze: #9a7b4f;
+  --color-bronze-deep: #7a5f38;
+  --color-line: #ddd5c2;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-cream);
+  color: var(--color-charcoal);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Visible focus for every interactive element */
+:focus-visible {
+  outline: 2px solid var(--color-moss);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Range slider styling (webkit + firefox) */
+input[type="range"].rv-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"].rv-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, var(--color-moss) 0%, var(--color-moss) var(--fill, 50%), var(--color-sand-deep) var(--fill, 50%), var(--color-sand-deep) 100%);
+}
+input[type="range"].rv-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid var(--color-moss);
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+input[type="range"].rv-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--color-sand-deep);
+}
+input[type="range"].rv-slider::-moz-range-progress {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--color-moss);
+}
+input[type="range"].rv-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid var(--color-moss);
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+
+/* Gentle fade-in for panels */
+@keyframes rv-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rv-fade-in {
+  animation: rv-fade-in 160ms ease-out;
+}
+
+/* Subtle spinner for real async work */
+@keyframes rv-spin {
+  to { transform: rotate(360deg); }
+}
+.rv-spinner {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 9999px;
+  border: 2px solid var(--color-sand-deep);
+  border-top-color: var(--color-moss);
+  animation: rv-spin 0.8s linear infinite;
+}
