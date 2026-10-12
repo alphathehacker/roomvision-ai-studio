@@ -1,0 +1,22 @@
+# Uploaded images (user data, never committed)
+uploads/*
+!uploads/.gitkeep
+
+# SQLite database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Environment with real secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# OS
+.DS_Store
